@@ -1,177 +1,103 @@
-═══════════════════════════════════════════════════════════
-NEURAL LATENT AUDIO GENERATOR
-Overlap AE + Bezier/fBm Walk + Continuous Audio Morphing
-═══════════════════════════════════════════════════════════
+[README.md](https://github.com/user-attachments/files/28386876/README.md)
+# L-RETRIEVER
 
-DEPENDENCIES
-────────────
-pip install torch torchaudio librosa soundfile scikit-learn scipy numpy sounddevice
+Latent space walker + corpus retrieval synthesizer for noise and drone generation.
 
-FILES
-─────
-train.py                  — full training + extraction pipeline
-generate.py               — offline generation, exports WAV
-livegenerate.py           — realtime streaming with tkinter parameter control
-extract_audio_chunks.py   — extracts audio_chunks.npy from existing model (no retraining)
-extract_mel_frames.py     — extracts mel_frames.npy from existing model (no retraining)
-./model/                  — created by train.py
+Trains a convolutional autoencoder on an audio dataset, navigates the learned latent space via Bezier spline + fractional Brownian motion, and retrieves audio chunks from the corpus via mel-space similarity. Output is a continuous morphing mass — no synthesis, no ISTFT, no phase artifacts.
 
-MODEL FILES
-───────────
-vae.pt            — trained autoencoder weights
-meta.pkl          — architecture parameters
-checkpoint.pt     — resumable training checkpoint
-latents_raw.npy   — raw latent vectors per chunk (used for walk)
-mel_frames.npy    — per-frame mel in log space, aligned with audio_chunks
-audio_chunks.npy  — raw audio samples per chunk (used for synthesis)
-band_stats.npy    — per-band mel statistics
-mel_chunks.npy    — flattened mel per chunk
-raw_chunks.npy    — raw FFT magnitude per chunk
-gmm.pkl           — gaussian mixture model on latent space
-pca.pkl           — PCA reduction
-scaler.pkl        — latent scaler
+---
 
-TRAINING
-────────
-python train.py --data_dir /path/to/audio --output_dir ./model
+## How it works
 
-options:
-  --epochs      120   default, 50 sufficient for testing
-  --latent_dim  64    default
-  --resume            resume from checkpoint.pt
+1. **Train** — a Conv1D autoencoder learns a latent representation of the audio corpus. Every chunk in the dataset is encoded and stored.
+2. **Walk** — at generation time, a trajectory is computed through latent space using Bezier splines between maximally distant waypoints, perturbed by multi-scale fBm (H=0.95/0.70/0.40).
+3. **Retrieve** — at each step, the decoder produces a mel query. The top-k most similar mel frames in the corpus are found via cosine similarity and blended with softmax weights. Hard blacklist + EMA penalty prevent repetition.
+4. **Morph** — retrieved raw audio chunks are overlap-added with a raised cosine bell window. Overlap ratio is controlled by `--fade_ms`. At high overlap, 20+ chunks are active simultaneously — individual chunks dissolve into the mass.
 
-input: .wav .mp3 .flac .ogg
-auto-converted to mono 22050Hz
+The model does not generate audio. It navigates a timbral space and retrieves material from the corpus. Full spectral density is guaranteed.
 
-After training, all files needed by generate are saved automatically.
-No separate extraction scripts needed for a fresh training run.
+---
 
-estimated time on Apple M2 with ~1h of audio:
-  50 epochs   →  20–30 min
-  120 epochs  →  50–70 min
+## Install
 
-UPDATING EXISTING MODEL (no retraining)
-────────────────────────────────────────
-If you have an existing model without audio_chunks.npy or mel_frames.npy:
+```bash
+pip install torch torchaudio librosa soundfile scikit-learn scipy numpy
+```
 
-  python extract_mel_frames.py --model_dir ./model
-  python extract_audio_chunks.py --data_dir ./audio --model_dir ./model
+---
 
-GENERATION
-──────────
+## Usage
+
+**Train**
+```bash
+python train.py --data_dir ./audio --output_dir ./model
+python train.py --data_dir ./audio --output_dir ./model --epochs 50 --resume
+```
+Accepts `.wav`, `.mp3`, `.flac`, `.ogg`. Saves all files needed for generation automatically.
+
+**Generate**
+```bash
 python generate.py --duration 60 --output out.wav
+```
 
-parameters:
-  --duration          output length in seconds (required)
-  --output            WAV path (default output.wav)
-  --model_dir         model directory (default ./model)
-  --step_size         fBm walk amplitude (default 0.3)
-  --smoothing_window  walk velocity smoothing (default 3)
-  --n_control         spline waypoints (default 16)
-  --top_k             retrieval candidates (default 8)
-  --variation         master variation knob (default 1.0)
-  --temperature       retrieval softness (default 0.2)
-  --rms_percentile    filter silent chunks below this percentile (default 20)
-  --fade_ms           controls chunk overlap and morphing (default 50)
+**Parameters**
 
-PARAMETER LOGIC
-───────────────
-step_size         small = slow latent evolution
-                  large = wide timbral jumps
+| param | default | description |
+|---|---|---|
+| `--duration` | required | output length in seconds |
+| `--step_size` | 0.3 | fBm walk amplitude |
+| `--smoothing_window` | 3 | walk velocity smoothing |
+| `--n_control` | 16 | spline waypoints |
+| `--top_k` | 8 | retrieval candidates |
+| `--variation` | 1.0 | master knob — <1 drone, >1 harsh |
+| `--temperature` | 0.2 | retrieval softness |
+| `--rms_percentile` | 20 | silence filter threshold |
+| `--fade_ms` | 50 | chunk overlap — 50=extreme fusion, 950=minimal |
 
-smoothing_window  high = inertial, gradual trajectory
-                  low  = more reactive changes
+**`--fade_ms` reference**
 
-n_control         more waypoints = more diverse regions visited
-                  fewer = longer coherent arcs
-                  auto-clamped to duration — never crashes
+| value | overlap | result |
+|---|---|---|
+| 50 | 0.95 | chunks completely dissolved |
+| 200 | 0.80 | very smooth |
+| 500 | 0.50 | balanced |
+| 950 | 0.05 | chunks mostly distinct |
 
-top_k             low  = sharp retrieval, closest match
-                  high = diffuse blend, hybrid timbres
+---
 
-variation         master knob — scales step_size
-                  < 1 = drone mode
-                  > 1 = harsh/chaotic mode
+## Architecture
 
-temperature       low  = retrieval dominated by best match
-                  high = all top-k candidates equally weighted
-                  0.8–1.0 recommended for maximum chunk variety
-
-rms_percentile    removes silent chunks from dataset pool
-                  0 = no filter, all chunks available
-                  raise if output still has silent gaps
-
-fade_ms           controls overlap between chunks in the morph
-                  50   → overlap 0.95 — extreme fusion, chunks unrecognizable
-                  200  → overlap 0.80 — very smooth, good default for drone
-                  500  → overlap 0.50 — balanced
-                  900  → overlap 0.10 — minimal overlap, chunks more distinct
-                  higher fade_ms = more chunks needed per second of output
-
-ANTI-REPETITION
-───────────────
-Two mechanisms prevent loop artifacts:
-  hard blacklist    — last top_k*2 chunks are excluded from selection
-  EMA penalty       — recently used chunks are softly penalized over time
-Both are always active. Do not disable unless intentional loop is desired.
-
-EXAMPLES BY TYPE
-────────────────
-DRONE / SUSTAINED TEXTURE
-  python generate.py --duration 300 --output drone.wav \
-    --variation 0.2 --temperature 0.05 --smoothing_window 8 \
-    --fade_ms 1000 --top_k 4 --n_control 8
-
-HARSH NOISE
-  python generate.py --duration 60 --output harsh.wav \
-    --variation 2.0 --temperature 0.2 --top_k 16 \
-    --fade_ms 30 --n_control 24
-
-EVOLVING TEXTURE / AMBIENT
-  python generate.py --duration 180 --output ambient.wav \
-    --variation 0.8 --temperature 0.15 --n_control 20 \
-    --fade_ms 200
-
-MAXIMUM FUSION
-  python generate.py --duration 60 --output fusion.wav \
-    --fade_ms 50 --temperature 0.8 --top_k 16 --rms_percentile 0
-
-LONG FORM
-  python generate.py --duration 600 --output long.wav \
-    --variation 1.0 --temperature 0.15 --n_control 48 --fade_ms 150
-
-REALTIME
-────────
-python livegenerate.py --model_dir ./model
-
-sliders control: step_size, smoothing_window, H, fbm_sigma, top_k
-parameters update live at next chunk
-
-ARCHITECTURE
-────────────
-Audio → pre-emphasis → Mel Spectrogram (128 mel, 22050Hz)
-      → Conv1D AE (overlap consistency + std + isophonic + variance loss)
-      → PCA (64 → 32) + GMM (12 components)
+```
+Audio → pre-emphasis → Mel (128 bands, 22050Hz)
+      → Conv1D AE (overlap consistency + spectral + std + variance loss)
+      → latent vectors extracted per chunk
       → Bezier spline walk between farthest-point waypoints
-      → multi-scale fBm perturbation (H=0.95/0.70/0.40)
-      → velocity-smoothed latent trajectory
-      → chunk-level soft retrieval (top-k weighted blend, full mel sequence)
+      → multi-scale fBm perturbation (H=0.95 / 0.70 / 0.40)
+      → velocity-smoothed trajectory
+      → mel query → top-k corpus retrieval (cosine, power-compressed)
       → hard blacklist + EMA penalty (anti-repetition)
-      → continuous bell-window morph (raised cosine overlap-add)
+      → raised cosine overlap-add morph
       → peak normalize → WAV
+```
 
-No ISTFT. No OLA. No phase artifacts.
-Synthesis uses raw audio samples from dataset — full spectral density guaranteed.
-Chunks are never heard in isolation — always fused into a continuous morphing mass.
+---
 
-INTERNAL PARAMETERS (hardcoded in train.py)
-────────────────────────────────────────────
-SEQ_FRAMES = 64    chunk duration ≈ 1.49s
-                   larger = longer coherent textures, slower training
-                   smaller = faster transitions, more fragmented
+## Internal parameters (train.py)
 
-HOP = 512          STFT hop size (mel extraction only, not synthesis)
-N_MELS = 128       mel bands — do not change without retraining
-LATENT_DIM = 64    latent space dimension — do not change without retraining
+| param | default | note |
+|---|---|---|
+| `SEQ_FRAMES` | 64 | chunk duration ≈ 1.49s |
+| `HOP` | 512 | STFT hop (mel only, not synthesis) |
+| `N_MELS` | 128 | do not change without retraining |
+| `LATENT_DIM` | 64 | do not change without retraining |
 
-═══════════════════════════════════════════════════════════
+---
+
+## Updating an existing model
+
+If you have a trained model without `audio_chunks.npy` or `mel_frames.npy`:
+
+```bash
+python extract_mel_frames.py --model_dir ./model
+python extract_audio_chunks.py --data_dir ./audio --model_dir ./model
+```
