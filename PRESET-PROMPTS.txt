@@ -1,0 +1,89 @@
+═══════════════════════════════════════════════════════════
+PRESET PROMPTS
+═══════════════════════════════════════════════════════════
+
+fade_ms controls chunk overlap in the morph:
+  50  → overlap 0.95 — extreme fusion, chunks completely dissolved
+  200 → overlap 0.80 — very smooth
+  500 → overlap 0.50 — balanced
+  950 → overlap 0.05 — minimal, chunks mostly distinct
+
+─────────────────────────────────────────────────────────
+
+1. MAXIMUM DRONE — near-static, ultra-smooth
+Almost no movement. Extreme overlap, minimum variation.
+python generate.py --duration 600 --variation 0.1 --temperature 0.03 \
+  --smoothing_window 12 --n_control 4 --top_k 3 \
+  --fade_ms 900 --output max_drone.wav
+
+2. SLOW DRONE — imperceptible evolution
+python generate.py --duration 300 --variation 0.2 --temperature 0.05 \
+  --smoothing_window 10 --n_control 8 --top_k 4 \
+  --fade_ms 800 --output slow_drone.wav
+
+3. DRIFT DRONE — mass slowly shifting
+python generate.py --duration 300 --variation 0.4 --temperature 0.07 \
+  --smoothing_window 6 --n_control 12 --top_k 6 \
+  --fade_ms 600 --output drift_drone.wav
+
+4. BUBBLING TEXTURE — organic mid-range movement
+python generate.py --duration 120 --variation 0.7 --temperature 0.10 \
+  --smoothing_window 4 --n_control 20 --top_k 8 \
+  --fade_ms 300 --output bubble.wav
+
+5. EVOLVING AMBIENT — slow coherent surface
+python generate.py --duration 600 --variation 0.6 --temperature 0.08 \
+  --smoothing_window 5 --n_control 24 --top_k 6 \
+  --fade_ms 400 --output ambient.wav
+
+6. DIFFUSE HYBRID — maximum blending, hybrid timbres
+python generate.py --duration 180 --variation 0.9 --temperature 0.80 \
+  --smoothing_window 4 --n_control 18 --top_k 20 \
+  --fade_ms 200 --rms_percentile 0 --output hybrid.wav
+
+7. SHARP RETRIEVAL — close to dataset, continuous walk
+python generate.py --duration 120 --variation 1.0 --temperature 0.03 \
+  --smoothing_window 3 --n_control 16 --top_k 3 \
+  --fade_ms 700 --output sharp_seq.wav
+
+8. HARSH NOISE — aggressive, fragmented
+python generate.py --duration 60 --variation 2.0 --temperature 0.20 \
+  --smoothing_window 2 --n_control 32 --top_k 12 \
+  --fade_ms 100 --output harsh.wav
+
+9. HARSH SUSTAINED — harsh with longer arcs
+python generate.py --duration 120 --variation 1.8 --temperature 0.18 \
+  --smoothing_window 3 --n_control 24 --top_k 12 \
+  --fade_ms 150 --output harsh_sustained.wav
+
+10. HARSH BURST — maximum instability
+python generate.py --duration 60 --variation 3.0 --temperature 0.30 \
+  --smoothing_window 1 --n_control 48 --top_k 20 \
+  --rms_percentile 40 --fade_ms 50 --output harsh_burst.wav
+
+11. MAXIMUM CHAOS — extreme, unpredictable
+python generate.py --duration 30 --variation 4.0 --temperature 0.50 \
+  --smoothing_window 1 --n_control 64 --top_k 24 \
+  --rms_percentile 50 --fade_ms 50 --output max_chaos.wav
+
+12. NOISE WALL — dense, uniform, no evolution
+python generate.py --duration 60 --variation 3.0 --temperature 0.30 \
+  --smoothing_window 1 --n_control 48 --top_k 20 \
+  --rms_percentile 40 --fade_ms 200 --output wall.wav
+
+13. TONAL SMEAR — high diffusion, dissolved texture
+python generate.py --duration 180 --variation 0.5 --temperature 0.80 \
+  --smoothing_window 7 --n_control 12 --top_k 16 \
+  --fade_ms 100 --rms_percentile 0 --output tonal_smear.wav
+
+14. LONG FORM — extended, diverse, balanced
+python generate.py --duration 900 --variation 0.8 --temperature 0.15 \
+  --smoothing_window 4 --n_control 48 --top_k 8 \
+  --fade_ms 300 --output longform.wav
+
+15. SLOW MORPH — near-imperceptible transformation
+python generate.py --duration 600 --variation 0.2 --temperature 0.06 \
+  --smoothing_window 10 --n_control 8 --top_k 4 \
+  --fade_ms 750 --output slow_morph.wav
+
+═══════════════════════════════════════════════════════════
