@@ -1,4 +1,4 @@
-[README.md](https://github.com/user-attachments/files/28386876/README.md)
+[README.md](https://github.com/user-attachments/files/28387683/README.md)
 # L-RETRIEVER
 
 Latent space walker + corpus retrieval synthesizer for noise and drone generation.
@@ -20,31 +20,46 @@ The model does not generate audio. It navigates a timbral space and retrieves ma
 
 ## Install
 
-```bash
-pip install torch torchaudio librosa soundfile scikit-learn scipy numpy
-```
+    pip install torch torchaudio librosa soundfile scikit-learn scipy numpy sounddevice
 
 ---
 
 ## Usage
 
 **Train**
-```bash
-python train.py --data_dir ./audio --output_dir ./model
-python train.py --data_dir ./audio --output_dir ./model --epochs 50 --resume
-```
+
+    python train.py --data_dir ./audio --output_dir ./model
+    python train.py --data_dir ./audio --output_dir ./model --epochs 50 --resume
+
 Accepts `.wav`, `.mp3`, `.flac`, `.ogg`. Saves all files needed for generation automatically.
 
-**Generate**
-```bash
-python generate.py --duration 60 --output out.wav
-```
+**Generate (offline)**
 
-**Parameters**
+    python generate.py --duration 60 --output out.wav
+
+**Stream (live)**
+
+    python livegenerate.py --variation 1.5 --fade_ms 200 --top_k 12
+
+Streams continuously to audio output. Press `Ctrl+C` to stop.
+
+Update parameters live by typing `param=value` and pressing Enter while the stream is running:
+
+    temperature=0.8
+    variation=2.0
+    fade_ms=100
+    top_k=16
+
+Changes take effect at the next chunk (~1.5s latency).
+
+---
+
+## Parameters
 
 | param | default | description |
 |---|---|---|
-| `--duration` | required | output length in seconds |
+| `--duration` | required | output length in seconds (generate only) |
+| `--output` | output.wav | output path (generate only) |
 | `--step_size` | 0.3 | fBm walk amplitude |
 | `--smoothing_window` | 3 | walk velocity smoothing |
 | `--n_control` | 16 | spline waypoints |
@@ -67,18 +82,16 @@ python generate.py --duration 60 --output out.wav
 
 ## Architecture
 
-```
-Audio → pre-emphasis → Mel (128 bands, 22050Hz)
-      → Conv1D AE (overlap consistency + spectral + std + variance loss)
-      → latent vectors extracted per chunk
-      → Bezier spline walk between farthest-point waypoints
-      → multi-scale fBm perturbation (H=0.95 / 0.70 / 0.40)
-      → velocity-smoothed trajectory
-      → mel query → top-k corpus retrieval (cosine, power-compressed)
-      → hard blacklist + EMA penalty (anti-repetition)
-      → raised cosine overlap-add morph
-      → peak normalize → WAV
-```
+    Audio → pre-emphasis → Mel (128 bands, 22050Hz)
+          → Conv1D AE (overlap consistency + spectral + std + variance loss)
+          → latent vectors extracted per chunk
+          → Bezier spline walk between farthest-point waypoints
+          → multi-scale fBm perturbation (H=0.95 / 0.70 / 0.40)
+          → velocity-smoothed trajectory
+          → mel query → top-k corpus retrieval (cosine, power-compressed)
+          → hard blacklist + EMA penalty (anti-repetition)
+          → raised cosine overlap-add morph
+          → peak normalize → WAV / audio stream
 
 ---
 
@@ -97,7 +110,5 @@ Audio → pre-emphasis → Mel (128 bands, 22050Hz)
 
 If you have a trained model without `audio_chunks.npy` or `mel_frames.npy`:
 
-```bash
-python extract_mel_frames.py --model_dir ./model
-python extract_audio_chunks.py --data_dir ./audio --model_dir ./model
-```
+    python extract_mel_frames.py --model_dir ./model
+    python extract_audio_chunks.py --data_dir ./audio --model_dir ./model
